@@ -1,11 +1,11 @@
-use std::ffi::CStr;
+use std::ffi::{CStr,CString};
 
 mod crypto {
     use std::os::raw::{c_char, c_uchar};
 
     #[repr(C)]
     #[derive(Debug)]
-    pub enum RC {
+    pub enum rc {
         Success,
         SodiumInitError,
 
@@ -25,28 +25,69 @@ mod crypto {
 
     #[link(name="rpass-cryptlib", kind="static")]
     extern "C" {
-        pub fn init();
-        pub fn random_bytes(len:i32) -> *const c_uchar;
-        pub fn encrypt(in_s:*const c_uchar, in_len:u64, out_len:*const u64, key: *const c_char) -> *const c_uchar;
-        pub fn decrypt(in_s:*const c_uchar, in_len:u64, out_len:*const u64, key: *const c_char) -> *const c_uchar;
-        pub fn encrypt_file(out_path:*const c_uchar, in_path:*const c_uchar,  key: *const c_uchar) -> RC;
-        pub fn decrypt_file(out_path:*const c_uchar, in_path:*const c_uchar,  key: *const c_uchar) -> RC;
+        pub fn random_bytes(len:usize) -> *const c_uchar;
+        pub fn encrypt(in_s:*const c_char, in_len:usize, out_len:*const u64, key: *const c_uchar) -> *const c_uchar;
+        pub fn decrypt(in_s:*const c_uchar, in_len:usize, out_len:*const u64, key: *const c_uchar) -> *const c_char;
+        pub fn encrypt_file(out_path:*const c_char, in_path:*const c_char,  key: *const c_uchar) -> rc;
+        pub fn decrypt_file(out_path:*const c_char, in_path:*const c_char,  key: *const c_uchar) -> rc;
+    }
+}
+
+fn random_bytes(len:usize) -> Vec<u8> {
+    unsafe {
+        let key = crypto::random_bytes(len);
+        std::slice::from_raw_parts(key, len).to_owned()
+    }
+}
+
+fn encrypt(m:&str, key:&Vec<u8>) -> Vec<u8> {
+    let mlen = m.len();
+    let mut out_len:u64 = 0;
+    unsafe {
+        let m = CString::new(m).unwrap();
+        let c = crypto::encrypt(m.as_ptr(), mlen, &mut out_len, key.as_ptr());
+        std::slice::from_raw_parts(c, out_len as usize).to_owned()
+    }
+}
+
+fn decrypt(c:&Vec<u8>, key:&Vec<u8>) -> String {
+    let clen = c.len();
+    let mut out_len:u64 = 0;
+    unsafe {
+        let m = crypto::decrypt(c.as_ptr(), clen, &mut out_len, key.as_ptr());
+        CStr::from_ptr(m).to_string_lossy().into_owned()
+    }
+}
+
+fn encrypt_file(out_path:&str, in_path:&str, key:&Vec<u8>) -> crypto::rc {
+    unsafe {
+        let out_path = CString::new(out_path).unwrap();
+        let in_path = CString::new(in_path).unwrap();
+        crypto::encrypt_file(out_path.as_ptr(), in_path.as_ptr(), key.as_ptr())
+    }
+}
+
+fn decrypt_file(out_path:&str, in_path:&str, key:&Vec<u8>) -> crypto::rc {
+    unsafe {
+        let out_path = CString::new(out_path).unwrap();
+        let in_path = CString::new(in_path).unwrap();
+        crypto::decrypt_file(out_path.as_ptr(), in_path.as_ptr(), key.as_ptr())
     }
 }
 
 fn main() {
-    let key = unsafe {
-        let key_buf = crypto::random_bytes(32);
-        std::slice::from_raw_parts(key_buf, 32)
-    };
-    print!("key: {:x?}", key);
+    let key = random_bytes(32);
+    print!("key: {:x?}\n", key);
+    let erc = encrypt_file("encrypted", "plain", &key);
+    print!("{:?}\n", erc);
+    let drc = decrypt_file("decrypted", "encrypted", &key);
+    print!("{:?}\n", drc);
 
-    unsafe {
-        let opath = "encrypted";
-        let ipath = "plain";
-        let rc = crypto::encrypt_file(opath.as_ptr(), ipath.as_ptr(), key.as_ptr());
-        print!("{:?}", rc);
-    }
+    let encrypted = encrypt("test!", &key);
+    print!("encrypted: {:x?}\n", encrypted);
+    let decrypted = decrypt(&encrypted, &key);
+
+    print!("decrypted: {}\n", decrypted);
 }
 #[cfg(test)]
 mod tests {

@@ -87,7 +87,8 @@ enum RC encrypt_file(const char* opath, const char* ipath, const unsigned char k
     if (init() < 0) {
         return SODIUM_INIT_ERROR;
     }
-
+    printf("encrypt_file() opath: %s\n", opath);
+    printf("encrypt_file() ipath: %s\n", ipath);
     unsigned char buf_in[CHUNK_SIZE] = { 0 };
     unsigned char buf_out[CHUNK_SIZE + crypto_secretstream_xchacha20poly1305_ABYTES] = { 0 };
     unsigned char header[crypto_secretstream_xchacha20poly1305_HEADERBYTES] = { 0 };
