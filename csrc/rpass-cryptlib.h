@@ -28,12 +28,23 @@ enum RC {
     OUTPUT_WRITE_ERROR
 };
 
+const size_t ENCRYPT_OVERHEAD = crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES;
+const size_t ENCRYPT_KEYSIZE = crypto_secretbox_KEYBYTES;
+const size_t FILE_ENCRYPT_KEYSIZE = crypto_secretstream_xchacha20poly1305_KEYBYTES;
 
 const char* rc2str(enum RC rc);
 int init();
-unsigned char* random_bytes(int);
-unsigned char* encrypt(unsigned char*, unsigned long long, unsigned long long*, const unsigned char key[crypto_secretbox_KEYBYTES]);
-unsigned char* decrypt(unsigned char*, unsigned long long, unsigned long long*, const unsigned char key[crypto_secretbox_KEYBYTES]);
-enum RC encrypt_file(const char*, const char*, const unsigned char key[crypto_secretstream_xchacha20poly1305_KEYBYTES]);
-enum RC decrypt_file(const char*, const char*, const unsigned char key[crypto_secretstream_xchacha20poly1305_KEYBYTES]);
+
+size_t encrypt_overhead();
+size_t encrypt_keysize();
+size_t file_encrypt_keysize();
+
+enum RC random_bytes(unsigned char *buf, size_t len);
+enum RC random_alphanum(unsigned char *buf, size_t len);
+
+enum RC encrypt(unsigned char *out, unsigned char *in, size_t in_len, const unsigned char key[ENCRYPT_KEYSIZE]);
+enum RC decrypt(unsigned char *out, unsigned char *in, size_t in_len, const unsigned char key[ENCRYPT_KEYSIZE]);
+
+enum RC encrypt_file(const char *out_path, const char *in_path, const unsigned char key[FILE_ENCRYPT_KEYSIZE]);
+enum RC decrypt_file(const char *out_path, const char *in_path, const unsigned char key[FILE_ENCRYPT_KEYSIZE]);
 #endif

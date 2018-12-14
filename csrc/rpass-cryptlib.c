@@ -38,57 +38,108 @@ int init() {
     return sodium_init();
 }
 
-unsigned char* random_bytes(int len) {
-    unsigned char* rand = calloc(len, 1);
-    randombytes_buf(rand, len);
-    return rand;
+size_t encrypt_overhead() {
+    return ENCRYPT_OVERHEAD;
+}
+size_t encrypt_keysize() {
+    return ENCRYPT_KEYSIZE;
+}
+size_t file_encrypt_keysize() {
+    return FILE_ENCRYPT_KEYSIZE;
 }
 
-unsigned char* encrypt(unsigned char* in, unsigned long long in_len, unsigned long long *out_len, const unsigned char key[crypto_secretbox_KEYBYTES]) {
+enum RC random_bytes(unsigned char *buf, size_t len) {
     if (init() < 0) {
-        return NULL;
+        return SODIUM_INIT_ERROR;
     }
 
-    *out_len = crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES + in_len;
-    unsigned char* out = calloc(*out_len, 1);
+    randombytes_buf(buf, len);
+
+    return SUCCESS;
+}
+
+enum RC random_alphanum(unsigned char *buf, size_t len) {
+    if (init() < 0) {
+        return SODIUM_INIT_ERROR;
+    }
+
+    randombytes_buf(buf, len);
+
+    unsigned char *u = buf;
+    for (size_t i = 0; i < len; i++) {
+        u = buf+i;
+
+        *u &= 0x3f; // 0011 1111
+        // This drops off the 2 most significant bits, leaving us with 6 bits
+        // We now have 6 random bits.
+
+        // 6 bits gives us 64 possibilities, 0-63. 
+        // We want to generate alphanumeric passwords, so we have 62 (0-9,a-z,A-Z) characters.
+        // 6 bits = 64 possiblities, since 64 is greater than 62 we have to "reroll" on two of our possiblities.
+        // 63 - 2 = 61.
+        while (*u > 61) {
+            // Regenerate this and clamp it to 6 bits.
+            randombytes_buf(u,1);
+            *u &= 0x3f;
+        };
+
+        // this block of code converts a number from 0-61 inclusive to mixed case alphanumeric
+        // 0-9 = 0-9
+        // 10-35 = A-Z
+        // 36-61 = a-z
+
+        if (*u < 10) {
+            // 0,1,2,3...9 occupy 48 - 57 of the ASCII table
+            *u += 48;
+        } else if (*u < 36) {
+            // A-Z occupy 65-90 of the ASCII table
+            // 65 - 10 = 55
+            *u += 55;
+        } else {
+            // a-z occupy 97-122 of the ASCII table
+            // 97 - 36 = 61
+            *u += 61;
+        }
+    }
+
+    return SUCCESS;
+}
+
+enum RC encrypt(unsigned char *out, unsigned char *in, size_t in_len, const unsigned char key[ENCRYPT_KEYSIZE]) {
+    if (init() < 0) {
+        return SODIUM_INIT_ERROR;
+    }
 
     unsigned char nonce[crypto_secretbox_NONCEBYTES] = { 0 };
     randombytes_buf(nonce, sizeof nonce);
     memcpy(out, nonce, crypto_secretbox_NONCEBYTES);
 
     if (crypto_secretbox_easy(out+crypto_secretbox_NONCEBYTES, in, in_len, nonce, key) != 0) {
-        free(out);
-        return NULL;
+        return ENCRYPTION_ERROR;
     }
 
-    return out;
+    return SUCCESS;
 }
 
-unsigned char* decrypt(unsigned char* in, unsigned long long in_len, unsigned long long *out_len, const unsigned char key[crypto_secretbox_KEYBYTES]) {
+enum RC decrypt(unsigned char *out, unsigned char *in, size_t in_len, const unsigned char key[ENCRYPT_KEYSIZE]) {
     if (init() < 0) {
-        return NULL;
+        return SODIUM_INIT_ERROR;
     }
-
-    *out_len = in_len - crypto_secretbox_NONCEBYTES - crypto_secretbox_MACBYTES;
-    unsigned char* out = calloc(*out_len, 1);
 
     unsigned char nonce[crypto_secretbox_NONCEBYTES] = { 0 };
     memcpy(nonce, in, crypto_secretbox_NONCEBYTES);
 
     if (crypto_secretbox_open_easy(out, in + crypto_secretbox_NONCEBYTES, in_len - crypto_secretbox_NONCEBYTES, nonce, key) != 0) {
-        free(out);
-        return NULL;
+        return DECRYPTION_ERROR;
     }
 
-    return out;
+    return SUCCESS;
 }
 
-enum RC encrypt_file(const char* opath, const char* ipath, const unsigned char key[crypto_secretstream_xchacha20poly1305_KEYBYTES]) {
+enum RC encrypt_file(const char *out_path, const char *in_path, const unsigned char key[FILE_ENCRYPT_KEYSIZE]) {
     if (init() < 0) {
         return SODIUM_INIT_ERROR;
     }
-    printf("encrypt_file() opath: %s\n", opath);
-    printf("encrypt_file() ipath: %s\n", ipath);
     unsigned char buf_in[CHUNK_SIZE] = { 0 };
     unsigned char buf_out[CHUNK_SIZE + crypto_secretstream_xchacha20poly1305_ABYTES] = { 0 };
     unsigned char header[crypto_secretstream_xchacha20poly1305_HEADERBYTES] = { 0 };
@@ -101,13 +152,13 @@ enum RC encrypt_file(const char* opath, const char* ipath, const unsigned char k
 
     enum RC ret = ENCRYPTION_ERROR;
 
-    in = fopen(ipath, "rb");
+    in = fopen(in_path, "rb");
     if (in == NULL) {
         ret = INPUT_OPEN_ERROR;
         return ret;
     }
 
-    out = fopen(opath, "wb");
+    out = fopen(out_path, "wb");
     if (out == NULL) {
         ret = OUTPUT_OPEN_ERROR;
         goto ret;
@@ -147,7 +198,7 @@ ret:
 }
 
 
-enum RC decrypt_file(const char* opath, const char* ipath, const unsigned char key[crypto_secretstream_xchacha20poly1305_KEYBYTES]) {
+enum RC decrypt_file(const char *out_path, const char *in_path, const unsigned char key[FILE_ENCRYPT_KEYSIZE]) {
     if (init() < 0) {
         return SODIUM_INIT_ERROR;
     }
@@ -164,13 +215,13 @@ enum RC decrypt_file(const char* opath, const char* ipath, const unsigned char k
     unsigned char tag;
 
 
-    in = fopen(ipath, "rb");
+    in = fopen(in_path, "rb");
     if (in == NULL) {
         ret = INPUT_OPEN_ERROR;
         return ret;
     }
 
-    out = fopen(opath, "wb");
+    out = fopen(out_path, "wb");
     if (out == NULL) {
         ret = OUTPUT_OPEN_ERROR;
         goto ret;
