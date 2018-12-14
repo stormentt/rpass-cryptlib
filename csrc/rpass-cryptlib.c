@@ -67,7 +67,7 @@ enum RC random_alphanum(unsigned char *buf, size_t len) {
 
     unsigned char *u = buf;
     for (size_t i = 0; i < len; i++) {
-        u = buf+i;
+        u = buf + i;
 
         *u &= 0x3f; // 0011 1111
         // This drops off the 2 most significant bits, leaving us with 6 bits
@@ -83,10 +83,10 @@ enum RC random_alphanum(unsigned char *buf, size_t len) {
             *u &= 0x3f;
         };
 
-        // this block of code converts a number from 0-61 inclusive to mixed case alphanumeric
-        // 0-9 = 0-9
-        // 10-35 = A-Z
-        // 36-61 = a-z
+        // this block of code converts a number from 0-61 inclusive to mixed case alphanumeric ASCII
+        // 0-9 -> 0-9
+        // 10-35 -> A-Z
+        // 36-61 -> a-z
 
         if (*u < 10) {
             // 0,1,2,3...9 occupy 48 - 57 of the ASCII table
