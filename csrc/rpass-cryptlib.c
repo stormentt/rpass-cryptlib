@@ -84,7 +84,7 @@ enum RC random_alphanum(unsigned char *buf, size_t len) {
         };
 
         // this block of code converts a number from 0-61 inclusive to mixed case alphanumeric ASCII
-        // 0-9 -> 0-9
+        //  0-9  -> 0-9
         // 10-35 -> A-Z
         // 36-61 -> a-z
 
