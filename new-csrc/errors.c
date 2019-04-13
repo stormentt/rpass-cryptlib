@@ -19,6 +19,9 @@ const char* rc2str(enum RC rc) {
 
         case MESSAGE_TOO_LONG:
             return "provided message is too long to encrypt";
+
+        case HASH_MISMATCH:
+            return "provided hashes are unequal";
         default:
             return "invalid error code; this shouldn't happen";
     }

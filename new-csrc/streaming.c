@@ -1,11 +1,11 @@
 #include "streaming.h"
 
 void stream_keygen(BYTES buf) {
-    crypto_secretstream_xchacha20poly1305_keygen(buf);
+    STREAM_KEYGEN(buf);
 }
 
 void stream_init_encrypt(STREAM_STATE *state, STREAM_HEADER header, STREAM_KEY key) {
-    crypto_secretstream_xchacha20poly1305_init_push(state, header, key);
+    INIT_PUSH(state, header, key);
 }
 
 enum RC stream_encrypt(STREAM_STATE *state, BYTES c, BYTES m, BYTES_LEN mlen, int end) {

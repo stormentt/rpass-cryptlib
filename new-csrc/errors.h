@@ -11,6 +11,7 @@ enum RC {
     HEADER_INVALID,
 
     MESSAGE_TOO_LONG,
+    HASH_MISMATCH,
 };
 
 const char* rc2str(enum RC rc);

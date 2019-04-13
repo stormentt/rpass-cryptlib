@@ -10,5 +10,4 @@ enum RC stream_encrypt(STREAM_STATE *state, BYTES c, BYTES m, BYTES_LEN mlen, in
 
 enum RC stream_init_decrypt(STREAM_STATE *state, STREAM_HEADER header, STREAM_KEY key);
 enum RC stream_decrypt(STREAM_STATE *state, BYTES m, BYTES c, BYTES_LEN clen, int *end);
-
 #endif

@@ -2,33 +2,56 @@
 #include <stdlib.h>
 #include "rpass-cryptlib.h"
 
+int encrypt_example();
 int file_example();
 
 int main() { 
     init();
 
+    if (encrypt_example() != 0) {
+        puts("encrypt example failed");
+        return 1;
+    }
+
     if (file_example() != 0) {
+        puts("file example failed");
         return 1;
     }
 }
 
+int encrypt_example() {
+    puts("encrypt_example(): ");
+    BYTES m = "hello world!";
+    BYTES_LEN m_len = 13;
+
+    BYTES_LEN c_len = m_len + ENCRYPTION_ABYTES;
+    BYTES c = calloc(c_len, 1);
+
+    BYTES_LEN d_len = c_len - ENCRYPTION_ABYTES;
+    BYTES d = calloc(d_len, 1);
+
+    ENCRYPTION_KEY key = { 0 };
+
+    encryption_keygen(key);
+
+    encrypt(c, m, m_len, key);
+
+    if (decrypt(d, c, c_len, key) != SUCCESS) {
+        puts("decryption failed");
+        return 1;
+    }
+
+    puts(d);
+    return sodium_memcmp(m, d, m_len);
+}
+
 int file_example() {
+    puts("file_example(): ");
+
     STREAM_STATE state;
     STREAM_HEADER header;
     STREAM_KEY key = { 0 };
     stream_keygen(key);
-
-    FILE *keyfile = fopen("keyfile", "w+");
-    if (keyfile == NULL) {
-        perror("unable to open keyfile");
-        return 1;
-    }
-
-    fwrite(key, STREAM_KEY_LEN, 1, keyfile);
-    if (fclose(keyfile) != 0) {
-        perror("unable to close keyfile");
-        return 1;
-    }
 
     // messages
     BYTES m1 = "hello world!\n";
@@ -57,14 +80,7 @@ int file_example() {
               d2_len = c2_len - STREAM_ABYTES, 
               d3_len = c3_len - STREAM_ABYTES;
 
-    FILE *encrypted = fopen("encrypted", "w+"); 
-    if (encrypted == NULL) {
-        perror("unable to open encrypted output");
-        return 1;
-    }
-
     stream_init_encrypt(&state, header, key);
-    fwrite(header, STREAM_HEADER_LEN, 1, encrypted);
 
     if (stream_encrypt(&state, c1, m1, m1_len, 0) != SUCCESS)  {
         puts("unable to encrypt m1");
@@ -79,21 +95,6 @@ int file_example() {
         return 1;
     }
 
-
-    fwrite(c1, c1_len, 1, encrypted);
-    fwrite(c2, c2_len, 1, encrypted);
-    fwrite(c3, c3_len, 1, encrypted);
-
-    if (fclose(encrypted) != 0) {
-        perror("unable to close encrypted");
-        return 1;
-    }
-
-    FILE *decrypted = fopen("decrypted", "w+"); 
-    if (decrypted == NULL) {
-        perror("unable to open decrypted output");
-        return 1;
-    }
 
     STREAM_STATE d_state;
     if (stream_init_decrypt(&d_state, header, key) != SUCCESS) {
@@ -133,23 +134,9 @@ int file_example() {
         return 1;
     }
 
-
-    fwrite(d1, d1_len, 1, decrypted);
-    fwrite(d2, d2_len, 1, decrypted);
-    fwrite(d3, d3_len, 1, decrypted);
-
-    if (fclose(decrypted) != 0) {
-        perror("unable to close decrypted");
-        return 1;
-    }
-
-    free(c1);
-    free(c2);
-    free(c3);
-
-    free(d1);
-    free(d2);
-    free(d3);
+    puts(d1);
+    puts(d2);
+    puts(d3);
 
     return 0;
 }
