@@ -11,10 +11,10 @@ void stream_init_encrypt(STREAM_STATE *state, STREAM_HEADER header, STREAM_KEY k
 enum RC stream_encrypt(STREAM_STATE *state, BYTES c, BYTES m, BYTES_LEN mlen, int end) {
     unsigned char tag = 0;
     if (end == 1) {
-        tag = TAG_FINAL;
+        tag = STREAM_TAG_FINAL;
     }
 
-    if (mlen > MAX_MLEN) {
+    if (mlen > STREAM_MAX_MLEN) {
         return MESSAGE_TOO_LONG;
     }
 
@@ -40,7 +40,7 @@ enum RC stream_decrypt(STREAM_STATE *state, BYTES m, BYTES c, BYTES_LEN clen, in
         return DECRYPTION_ERROR;
     }
 
-    if (tag == TAG_FINAL) {
+    if (tag == STREAM_TAG_FINAL) {
         *end = 1;
     }
 

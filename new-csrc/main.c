@@ -41,9 +41,9 @@ int file_example() {
     BYTES_LEN m3_len = 8; // \0
 
     // ciphertexts
-    BYTES_LEN c1_len = m1_len + ABYTES, 
-              c2_len = m2_len + ABYTES, 
-              c3_len = m3_len + ABYTES;
+    BYTES_LEN c1_len = m1_len + STREAM_ABYTES, 
+              c2_len = m2_len + STREAM_ABYTES, 
+              c3_len = m3_len + STREAM_ABYTES;
     BYTES c1 = calloc(c1_len, 1), 
           c2 = calloc(c2_len, 1), 
           c3 = calloc(c3_len, 1);
@@ -53,9 +53,9 @@ int file_example() {
           d2 = calloc(m2_len, 1), 
           d3 = calloc(m3_len, 1);
 
-    BYTES_LEN d1_len = c1_len - ABYTES, 
-              d2_len = c2_len - ABYTES, 
-              d3_len = c3_len - ABYTES;
+    BYTES_LEN d1_len = c1_len - STREAM_ABYTES, 
+              d2_len = c2_len - STREAM_ABYTES, 
+              d3_len = c3_len - STREAM_ABYTES;
 
     FILE *encrypted = fopen("encrypted", "w+"); 
     if (encrypted == NULL) {
