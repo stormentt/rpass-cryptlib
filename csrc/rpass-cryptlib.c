@@ -1,5 +1,9 @@
 #include "rpass-cryptlib.h"
 
 int init() {
-    return sodium_init();
+    if (sodium_init() < 0) {
+        return SODIUM_INIT_ERROR;
+    }
+
+    return SUCCESS;
 }

@@ -1,7 +1,12 @@
-use std::ffi::{CStr,CString};
+#![allow(dead_code)]
+use std::ffi::CStr;
 
 mod crypto {
     use std::os::raw::{c_char, c_uchar};
+
+    type CBytes = *const c_uchar;
+    type CBytesMut = *mut c_uchar;
+    type CBytesLen = usize;
 
     #[repr(C)]
     #[derive(Debug)]
@@ -11,34 +16,68 @@ mod crypto {
 
         DecryptionError,
         EncryptionError,
+        HashingError,
 
-        InputHeaderInvalid,
-        InputHeaderReadError,
-        InputOpenError,
-        InputPrematureEOF,
-        InputReadError,
+        HeaderInvalid,
 
-        OutputCloseError,
-        OutputOpenError,
-        OutputWriteError,
+        MessageTooLong,
+        HashMismatch,
+    }
+
+    #[repr(C, align(64))]
+    #[derive(Copy, Clone)]
+    pub struct hash_state {
+        pub opaque: [c_uchar; 384usize],
+    }
+
+    #[repr(C)]
+    #[derive(Debug, Copy, Clone)]
+    pub struct stream_state {
+        pub k: [c_uchar; 32usize],
+        pub nonce: [c_uchar; 12usize],
+        pub _pad: [c_uchar; 8usize],
     }
 
     #[link(name="rpass-cryptlib", kind="static")]
     extern "C" {
+        // defs.c
+        pub static encryption_abytes: usize;
+        pub static encryption_key_len: usize;
+        pub static encryption_nonce_len: usize;
+
+        pub static stream_header_len: usize;
+        pub static stream_key_len: usize;
+        pub static stream_abytes: usize;
+
+        pub static hash_key_len: usize;
+        pub static hash_len: usize;
+
+        // encryption.c
+        pub fn encryption_keygen(buf: CBytesMut);
+        pub fn encrypt(c: CBytesMut, m: CBytes, mlen: CBytesLen, key: CBytes);
+        pub fn decrypt(m: CBytesMut, c: CBytes, clen: CBytesLen, key: CBytes) -> RC;
+        
+        // errors.c
         pub fn rc2str(rc:RC) -> *const c_char;
 
-        pub fn encrypt_overhead() -> usize;
-        pub fn encrypt_keysize() -> usize;
-        pub fn file_encrypt_keysize() -> usize;
+        // hashing.c
+        pub fn hash_keygen(buf: CBytesMut);
+        pub fn hash(out: CBytes, m: CBytes, mlen: CBytesLen, key: CBytes);
+        pub fn hash_init(state: *mut hash_state, key: CBytes);
+        pub fn hash_update(state: *mut hash_state, m: CBytes, m_len: CBytesLen);
+        pub fn hash_final(state: *mut hash_state, out: CBytesMut);
+        pub fn hash_equals(m1: CBytes, m2: CBytes);
 
-        pub fn random_bytes(buf:*const c_uchar, len:usize) -> RC;
-        pub fn random_alphanum(buf:*const c_uchar, len:usize) -> RC;
+        // rpass-cryptlib.c
+        pub fn init() -> RC;
 
-        pub fn encrypt(out_buf:*const c_uchar, in_buf:*const c_char, in_len:usize, key: *const c_uchar) -> RC;
-        pub fn decrypt(out_buf:*const c_uchar, in_buf:*const c_uchar, in_len:usize, key: *const c_uchar) -> RC;
+        // streaming.c
+        pub fn stream_keygen(buf: CBytesMut);
+        pub fn stream_init_encrypt(state: *mut stream_state, header: CBytes, key: CBytes);
+        pub fn stream_encrypt(state: *mut stream_state, c: CBytesMut, m: CBytes, mlen: CBytes, end: i8) -> RC;
 
-        pub fn encrypt_file(out_path:*const c_char, in_path:*const c_char,  key: *const c_uchar) -> RC;
-        pub fn decrypt_file(out_path:*const c_char, in_path:*const c_char,  key: *const c_uchar) -> RC;
+        pub fn stream_init_decrypt(state: *mut stream_state, header: CBytes, key: CBytes) -> RC;
+        pub fn stream_decrypt(state: *mut stream_state, m: CBytesMut, c: CBytes, clen: CBytes, end: *const i8) -> RC;
     }
 }
 
@@ -70,92 +109,49 @@ impl std::error::Error for Error {
     }
 }
 
-fn random_bytes(len:usize) -> Result<Vec<u8>, Error> {
+pub fn init() {
     unsafe {
-        let mut buf:Vec<u8> = Vec::with_capacity(len);
-        let rc = crypto::random_bytes(buf.as_mut_ptr(), len);
-        buf.set_len(len);
-
-        match rc {
-            crypto::RC::Success => Ok(buf),
-            _ => Err(Error::new(rc)),
-        }
+        crypto::init();
     }
 }
 
-fn random_key() -> Result<Vec<u8>, Error> {
-    random_bytes(32)
-}
-
-fn random_alphanum(len:usize) -> Result<String, Error> {
+pub fn encryption_keygen() -> Vec<u8> {
     unsafe {
-        let mut buf:Vec<u8> = Vec::with_capacity(len);
-        let rc = crypto::random_alphanum(buf.as_mut_ptr(), len);
-        buf.set_len(len);
-        match rc {
-            crypto::RC::Success => {
-                let randstr = String::from_utf8(buf).unwrap();
-                Ok(randstr)
-            },
-            _ => Err(Error::new(rc)),
-        }
+        let mut buf:Vec<u8> = Vec::with_capacity(crypto::encryption_key_len);
+        crypto::encryption_keygen(buf.as_mut_ptr());
+        buf.set_len(crypto::encryption_key_len);
+
+        buf
     }
 }
 
-fn encrypt(m:&str, key:&Vec<u8>) -> Result<Vec<u8>, Error> {
+pub fn encrypt(m:&str, key:&Vec<u8>) -> Result<Vec<u8>, Error> {
     let mlen = m.len();
     unsafe {
-        let outlen = mlen + crypto::encrypt_overhead();
-        let mut outbuf:Vec<u8> = Vec::with_capacity(outlen);
-        outbuf.set_len(outlen);
-        let m = CString::new(m).unwrap();
+        let clen = mlen + crypto::encryption_abytes;
+        let mut c:Vec<u8> = Vec::with_capacity(clen);
+        c.set_len(clen);
+        let m = m.as_bytes();
 
-        let rc = crypto::encrypt(outbuf.as_mut_ptr(), m.as_ptr(), mlen, key.as_ptr());
-        match rc {
-            crypto::RC::Success => Ok(outbuf),
-            _ => Err(Error::new(rc)),
-        }
+        crypto::encrypt(c.as_mut_ptr(), m.as_ptr(), mlen, key.as_ptr());
+        Ok(c)
     }
 }
 
-fn decrypt(c:&Vec<u8>, key:&Vec<u8>) -> Result<String, Error> {
+pub fn decrypt(c:&Vec<u8>, key:&Vec<u8>) -> Result<String, Error> {
     let clen = c.len();
     unsafe {
-        if clen < crypto::encrypt_overhead() {
+        if clen < crypto::encryption_abytes {
             return Err(Error::new(crypto::RC::DecryptionError))
         }
 
-        let outlen = clen - crypto::encrypt_overhead();
+        let mlen = clen - crypto::encryption_abytes;
 
-        let mut outbuf:Vec<u8> = Vec::with_capacity(outlen);
-        outbuf.set_len(outlen);
-        let rc = crypto::decrypt(outbuf.as_mut_ptr(), c.as_ptr(), clen, key.as_ptr());
+        let mut m:Vec<u8> = Vec::with_capacity(mlen);
+        m.set_len(mlen);
+        let rc = crypto::decrypt(m.as_mut_ptr(), c.as_ptr(), clen, key.as_ptr());
         match rc {
-            crypto::RC::Success => Ok(String::from_utf8(outbuf).unwrap()),
-            _ => Err(Error::new(rc)),
-        }
-    }
-}
-
-fn encrypt_file(out_path:&str, in_path:&str, key:&Vec<u8>) -> Result<(), Error> {
-    unsafe {
-        let out_path = CString::new(out_path).unwrap();
-        let in_path = CString::new(in_path).unwrap();
-        let rc = crypto::encrypt_file(out_path.as_ptr(), in_path.as_ptr(), key.as_ptr());
-        match rc {
-            crypto::RC::Success => Ok(()),
-            _ => Err(Error::new(rc)),
-        }
-    }
-}
-
-fn decrypt_file(out_path:&str, in_path:&str, key:&Vec<u8>) -> Result<(), Error> {
-    unsafe {
-        let out_path = CString::new(out_path).unwrap();
-        let in_path = CString::new(in_path).unwrap();
-        let rc = crypto::decrypt_file(out_path.as_ptr(), in_path.as_ptr(), key.as_ptr());
-        match rc {
-            crypto::RC::Success => Ok(()),
+            crypto::RC::Success => Ok(String::from_utf8(m).unwrap()),
             _ => Err(Error::new(rc)),
         }
     }
@@ -163,70 +159,15 @@ fn decrypt_file(out_path:&str, in_path:&str, key:&Vec<u8>) -> Result<(), Error> 
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{File,create_dir};
-    use std::io::{Read,Write};
-    use std::env::temp_dir;
-
-    #[test]
-    fn random_bytes() {
-        let bytes = ::random_bytes(128).unwrap();
-        assert!(bytes.len() == 128);
-    }
-
-    #[test]
-    fn random_alphanum() {
-        let st = ::random_alphanum(32).unwrap();
-        assert!(st.len() == 32);
-    }
-
     #[test]
     fn string_encryption() {
-        let key = ::random_key().unwrap();
+        ::init();
+        let key = ::encryption_keygen();
         let plaintext = "hello world!";
 
         let ciphertext = ::encrypt(&plaintext, &key).unwrap();
         let decrypted = ::decrypt(&ciphertext, &key).unwrap();
 
         assert_eq!(plaintext, decrypted);
-    }
-
-    #[test]
-    fn file_encryption() {
-        let mut tmpdir = temp_dir();
-        tmpdir.push("rust-cryptlib-testfiles");
-        create_dir(&tmpdir);
-
-        let mut plaintext = tmpdir.clone();
-        plaintext.push("plaintext");
-        let mut encrypted = tmpdir.clone();
-        encrypted.push("encrypted");
-        let mut decrypted = tmpdir.clone();
-        decrypted.push("decrypted");
-
-        let key = ::random_key().unwrap();
-        let test_bytes = ::random_bytes(1024 * 1024 * 10).unwrap(); // 10 MiB
-
-        {
-            let mut file = File::create(&plaintext).unwrap();
-            file.write_all(&test_bytes);
-        }
-
-        if let Err(err) = ::encrypt_file(encrypted.to_str().unwrap(), plaintext.to_str().unwrap(), &key) {
-            assert!(false, err);
-        }
-
-        if let Err(err) = ::decrypt_file(decrypted.to_str().unwrap(), encrypted.to_str().unwrap(), &key) {
-            assert!(false, err);
-        }
-
-        {
-            let mut file = File::open(&decrypted).unwrap();
-            let mut read_bytes = vec!(0 as u8; 0);
-            file.read_to_end(&mut read_bytes).unwrap();
-
-            assert_eq!(read_bytes, test_bytes);
-        }
-
-        std::fs::remove_dir_all(&tmpdir);
     }
 }

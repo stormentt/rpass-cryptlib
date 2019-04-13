@@ -1,5 +1,5 @@
 [package]
-name = "rpass-cryptlib"
+name = "rpass-crypt"
 version = "0.1.0"
 authors = ["Tanner Storment <tanner@secrecy.email>"]
 links = "sodium"
