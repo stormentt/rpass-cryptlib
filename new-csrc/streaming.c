@@ -8,7 +8,7 @@ void stream_init_encrypt(STREAM_STATE *state, STREAM_HEADER header, STREAM_KEY k
     crypto_secretstream_xchacha20poly1305_init_push(state, header, key);
 }
 
-enum RC stream_encrypt(STREAM_STATE *state, BYTES c, BYTES_LEN *clen, BYTES m, BYTES_LEN mlen, int end) {
+enum RC stream_encrypt(STREAM_STATE *state, BYTES c, BYTES m, BYTES_LEN mlen, int end) {
     unsigned char tag = 0;
     if (end == 1) {
         tag = TAG_FINAL;
@@ -18,7 +18,7 @@ enum RC stream_encrypt(STREAM_STATE *state, BYTES c, BYTES_LEN *clen, BYTES m, B
         return MESSAGE_TOO_LONG;
     }
 
-    if (PUSH(state, c, clen, m, mlen, tag) != 0) {
+    if (PUSH(state, c, m, mlen, tag) != 0) {
         return ENCRYPTION_ERROR;
     }
 
@@ -33,10 +33,10 @@ enum RC stream_init_decrypt(STREAM_STATE *state, STREAM_HEADER header, STREAM_KE
     return SUCCESS;
 }
 
-enum RC stream_decrypt(STREAM_STATE *state, BYTES m, BYTES_LEN *mlen, BYTES c, BYTES_LEN clen, int *end) {
+enum RC stream_decrypt(STREAM_STATE *state, BYTES m, BYTES c, BYTES_LEN clen, int *end) {
     unsigned char tag = 0;
 
-    if (PULL(state, m, mlen, c, clen, &tag) != 0) {
+    if (PULL(state, m, c, clen, &tag) != 0) {
         return DECRYPTION_ERROR;
     }
 
