@@ -6,6 +6,8 @@ pub mod hashing;
 pub mod helpers;
 pub mod streaming;
 
+static CHUNK_SIZE:usize = 16 * 1024 * 1024;
+
 mod crypto {
     use std::os::raw::{c_char, c_uchar};
 
@@ -160,6 +162,16 @@ mod tests {
 
         assert_eq!(h1, h3);
         assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn hash_file() {
+        ::init();
+        let key = hashing::keygen();
+
+        let hash = hashing::hash_file("plaintext", &key).unwrap();
+        let matched = hashing::check_file("plaintext", &hash, &key);
+        assert!(matched == true);
     }
 
     #[test]

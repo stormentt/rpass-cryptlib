@@ -24,7 +24,7 @@ pub fn encrypt(dpath: &str, spath: &str, key: &Vec<u8>) -> Result<(), Box<Error>
         crypto::stream_init_encrypt(&mut state, header.as_mut_ptr(), key.as_ptr());
         dest.write(&header)?;
 
-        let mut buf = helpers::raw_bytes(16384);
+        let mut buf = helpers::raw_bytes(::CHUNK_SIZE);
         loop {
             let n = source.read(&mut buf)?;
             if n == 0 {
@@ -33,7 +33,7 @@ pub fn encrypt(dpath: &str, spath: &str, key: &Vec<u8>) -> Result<(), Box<Error>
 
             let mut c = helpers::raw_bytes(n + crypto::stream_abytes);
             let mut end:i8 = 0;
-            if n < 16384 {
+            if n < ::CHUNK_SIZE {
                 end = 1;
             }
 
@@ -60,7 +60,7 @@ pub fn decrypt(dpath: &str, spath: &str, key: &Vec<u8>) -> Result<(), Box<Error>
             return Err(Box::new(::Error::new(rc)));
         }
 
-        let mut buf = helpers::raw_bytes(16384 + crypto::stream_abytes);
+        let mut buf = helpers::raw_bytes(::CHUNK_SIZE + crypto::stream_abytes);
         loop {
             let n = source.read(&mut buf)?;
             if n == 0 {
